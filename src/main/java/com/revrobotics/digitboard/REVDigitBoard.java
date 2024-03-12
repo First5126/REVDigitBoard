@@ -1,38 +1,36 @@
-package org.usfirst.frc.team3216.robot; // might need to change this number
+package com.revrobotics.digitboard;
 
-import edu.wpi.first.wpilibj.I2C;
-import edu.wpi.first.wpilibj.Timer;
-import edu.wpi.first.wpilibj.I2C.Port;
-import edu.wpi.first.wpilibj.DigitalInput;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.function.BooleanSupplier;
+
 import edu.wpi.first.wpilibj.AnalogInput;
-
-import java.util.*;
+import edu.wpi.first.wpilibj.DigitalInput;
+import edu.wpi.first.wpilibj.I2C;
+import edu.wpi.first.wpilibj.I2C.Port;
+import edu.wpi.first.wpilibj.Timer;
 
 public class REVDigitBoard {
-	/*
-	 * DOCUMENTATION::
-	 * 
-	 * REVDigitBoard() : constructor
-	 * void display(String str) : displays the first four characters of the string (only alpha (converted to uppercase), numbers, and spaces)
-	 * void display(double batt) : displays a decimal number (like battery voltage) in the form of 12.34 (ten-one-decimal-tenth-hundredth)
-	 * void clear() : clears the display
-	 * boolean getButtonA() : button A on the board
-	 * boolean getButtonB() : button B on the board
-	 * double getPot() : potentiometer value
-	 */
-	
-	I2C i2c;
-	DigitalInput buttonA, buttonB;
-	AnalogInput pot;
-	
-	byte[][] charreg;
-	Map charmap;
-	
-	REVDigitBoard() {
-		i2c = new I2C(Port.kMXP, 0x70);
+    private static REVDigitBoard i;
+
+    private I2C i2c;
+    private DigitalInput buttonA;
+    private DigitalInput buttonB;
+
+    private AnalogInput pot;
+
+    private byte[][] charreg;
+    private HashMap<Character,Integer> charmap;
+
+
+	private BooleanSupplier bs_a_button;
+	private BooleanSupplier bs_b_button;
+
+    public REVDigitBoard(){
+        i2c = new I2C(Port.kMXP, 0x70);
 		buttonA = new DigitalInput(19);
 		buttonB = new DigitalInput(20);
-		pot = new AnalogInput(3);
+		pot = new AnalogInput(7);
 		
 		byte[] osc = new byte[1];
 	 	byte[] blink = new byte[1];
@@ -45,7 +43,7 @@ public class REVDigitBoard {
 		Timer.delay(.01);
 		i2c.writeBulk(bright);
 		Timer.delay(.01);
-		//i2c.writeBulk(blink);
+		i2c.writeBulk(blink);
 		Timer.delay(.01);
 		
 		charreg = new byte[37][2]; //charreg is short for character registry
@@ -126,10 +124,37 @@ public class REVDigitBoard {
 		charmap.put('Z',35);
 		charreg[36][0] = (byte)0b00000000; charreg[36][1] = (byte)0b00000000; //space
 		charmap.put(' ',36);
+
+
+    }
+
+    private void _display(int[] charz){
+        byte[] byte1 = new byte[10];
+		byte1[0] = (byte)(0b0000111100001111);
+ 		byte1[2] = charreg[charz[3]][0];
+ 		byte1[3] = charreg[charz[3]][1];
+ 		byte1[4] = charreg[charz[2]][0];
+ 		byte1[5] = charreg[charz[2]][1];
+ 		byte1[6] = charreg[charz[1]][0];
+ 		byte1[7] = charreg[charz[1]][1];
+ 		byte1[8] = charreg[charz[0]][0];
+ 		byte1[9] = charreg[charz[0]][1];
+ 		//send the array to the board
+		System.out.println("Pushing Bytes to the Display: " + byte1);
+
+ 		i2c.writeBulk(byte1);
+		//System.out.println("Register is pushed");
+ 		Timer.delay(0.01);
+		this.setupBooleanSuppliers();
+    }
+    private String repeat(char c, int n) {
+	    char[] arr = new char[n];
+	    Arrays.fill(arr, c);
+	    return new String(arr);
 	}
-	
-	void display(String str) { // only displays first 4 chars
-		int[] charz = new int[4];
+
+    public void display(String str){
+        int[] charz = new int[4];
 		// uppercase and map it
 		str = repeat(' ',Math.max(0, 4-str.length())) + str.toUpperCase(); // pad it to 4 chars
 		
@@ -141,63 +166,72 @@ public class REVDigitBoard {
 			charz[i] = g;
 		}
 		this._display(charz);
+    }
+
+    public boolean getButtonA(){
+        return buttonA.get();
+    }
+    public boolean getButtonB(){
+        return buttonB.get();
+    }
+	public DigitalInput getAButtonDigitalInputRaw(){
+		return buttonA;
 	}
-	
-	void display(double batt) { // optimized for battery voltage, needs a double like 12.34
-		int[] charz = {36,36,36,36};
-		// idk how to decimal point
-		int ten = (int)(batt/10);
-		int one = (int)(batt%10);
-		int tenth = (int)((batt*10)%10);
-		int hundredth = (int)((batt*100)%10);
-		
-		if (ten != 0) charz[0] = ten;
-		charz[1] = one;
-		charz[2] = tenth;
-		charz[3] = hundredth;
-		
+	public DigitalInput getBButtonDigitalInputRaw(){
+		return buttonB;
+	}
+    public double getAdjustPotentiometerVoltage(){
+        return pot.getVoltage();
+    }
+    private void setupBooleanSuppliers(){
+		bs_a_button = new BooleanSupplier() {
+
+			@Override
+			public boolean getAsBoolean() {
+				if(!getButtonA()){
+					//System.out.println("Button A Pushed");
+					return true;
+				}
+				else {
+					return false;
+				}
+			}
+			
+		};
+
+		bs_b_button = new BooleanSupplier() {
+
+			@Override
+			public boolean getAsBoolean() {
+				if(!getButtonB()){
+					//System.out.println("Button B Pressed");
+					return true;
+				}
+				else {
+					return false;
+				}
+			}
+			
+		};
+	}
+	public BooleanSupplier aButtonSupplier(){
+		return bs_a_button;
+	}
+    public void clear(){
+        int[] charz = {36,36,36,36}; // whyy java
 		this._display(charz);
+    }
+    public static REVDigitBoard getInstance(){
+        if(i == null){
+            i = new REVDigitBoard();
+        }
+        else {
+            
+        }
+        return i;
+    }
+
+	public I2C getMXPI2C(){
+		return i2c;
 	}
-	
-	 void clear() {
-		 int[] charz = {36,36,36,36}; // whyy java
-		 this._display(charz);
-	 }
-	 
-	 boolean getButtonA() {
-		 return buttonA.get();
-	 }
-	 boolean getButtonB() {
-		 return buttonB.get();
-	 }
-	 double getPot() {
-		 return pot.getVoltage();
-	 }
-	
-////// not supposed to be publicly used..
-	
-	void _display(int[] charz) {
-		byte[] byte1 = new byte[10];
-		byte1[0] = (byte)(0b0000111100001111);
- 		byte1[2] = charreg[charz[3]][0];
- 		byte1[3] = charreg[charz[3]][1];
- 		byte1[4] = charreg[charz[2]][0];
- 		byte1[5] = charreg[charz[2]][1];
- 		byte1[6] = charreg[charz[1]][0];
- 		byte1[7] = charreg[charz[1]][1];
- 		byte1[8] = charreg[charz[0]][0];
- 		byte1[9] = charreg[charz[0]][1];
- 		//send the array to the board
- 		i2c.writeBulk(byte1);
- 		Timer.delay(0.01);
-	}
-	
-	String repeat(char c, int n) {
-	    char[] arr = new char[n];
-	    Arrays.fill(arr, c);
-	    return new String(arr);
-	}
-	
 }
-
-
